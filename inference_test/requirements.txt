@@ -1,0 +1,6 @@
+transformers==4.56.1
+huggingface-hub<1.0,>=0.34.0
+accelerate
+safetensors
+sentencepiece
+gradio<6
