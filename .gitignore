@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local build/debug notes (not for version control)
+BUILD_NOTES_infllmv2.md
