@@ -219,3 +219,9 @@ __marimo__/
 
 # Local build/debug notes (not for version control)
 BUILD_NOTES_infllmv2.md
+
+# Benchmark run outputs (predictions/summaries, regenerated locally)
+benchmark/results/
+
+# 训练日志 (本地产物)
+/log/

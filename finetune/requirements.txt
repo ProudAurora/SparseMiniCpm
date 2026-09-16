@@ -1,0 +1,22 @@
+# 与 ../benchmark、../inference_test 保持同一套 transformers/hub 版本
+transformers==4.56.1
+huggingface-hub<1.0,>=0.34.0
+accelerate
+safetensors
+sentencepiece
+tqdm
+
+# 训练
+datasets
+deepspeed
+tensorboard
+
+# ---- 阶段二 (长序列 + InfLLM v2) 的额外依赖 ----
+# 1) flash-attn: 硬依赖。MiniCPMInfLLMv2Attention 同时承担稀疏和稠密两条路,
+#    短于 dense_len 的序列直接调 flash_attn_varlen_func。需要编译, A800 上约十几分钟:
+#       pip install flash-attn --no-build-isolation
+#
+# 2) infllm_v2: CUDA 内核, 从仓库子模块编译:
+#       cd ../third_party/infllmv2_cuda_impl && pip install -e . --no-build-isolation
+#
+# 装完跑 `python check_env.py --sparse` 确认两者都生效。
