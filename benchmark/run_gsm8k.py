@@ -22,6 +22,7 @@ from common import (
     numbers_match,
     print_detail,
     read_jsonl,
+    shard,
     write_jsonl,
 )
 
@@ -49,18 +50,25 @@ def evaluate_gsm8k(
     limit: int = None,
     max_new_tokens: int = 512,
     show_details: bool = False,
+    shard_index: int = 0,
+    num_shards: int = 1,
 ):
     """Runs GSM8K end to end and returns (predictions, summary_dict)."""
     data_path = f"{eval_dir}/gsm8k_jsonl/{config}/{split}.jsonl"
     examples = read_jsonl(data_path)
     if limit:
         examples = examples[:limit]
+    # Sharding happens after --limit so that 'first N examples' means the same
+    # set of questions whether the run is split across GPUs or not. Indices are
+    # attached beforehand so a prediction still names its position in the full
+    # dataset once the shards are merged back together.
+    examples = shard(list(enumerate(examples)), shard_index, num_shards)
 
     predictions = []
     correct = 0
     start = time.time()
     progress = tqdm(examples, desc="gsm8k", unit="ex")
-    for i, ex in enumerate(progress):
+    for done, (i, ex) in enumerate(progress):
         prompt = PROMPT_TEMPLATE.format(question=ex["question"])
         response = generate_response(tokenizer, model, prompt, device, max_new_tokens=max_new_tokens)
         pred = extract_final_number(response)
@@ -78,8 +86,8 @@ def evaluate_gsm8k(
             }
         )
         if show_details:
-            print_detail(f"gsm8k {i + 1}/{len(examples)}", gold, pred, is_correct)
-        progress.set_postfix(acc=f"{correct / (i + 1):.4f}", correct=f"{correct}/{i + 1}")
+            print_detail(f"gsm8k {done + 1}/{len(examples)}", gold, pred, is_correct)
+        progress.set_postfix(acc=f"{correct / (done + 1):.4f}", correct=f"{correct}/{done + 1}")
 
     elapsed = time.time() - start
     accuracy = correct / len(examples) if examples else 0.0
@@ -88,6 +96,7 @@ def evaluate_gsm8k(
         "config": config,
         "split": split,
         "num_examples": len(examples),
+        "shard": [shard_index, num_shards],
         "correct": correct,
         "accuracy": accuracy,
         "elapsed_seconds": elapsed,

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch MiniCPM model."""
+import os
 import math
 import re
 import warnings
@@ -381,6 +382,10 @@ if is_torch_fx_available():
 
 
 logger = logging.get_logger(__name__)
+
+# SPARSE_DEBUG=1 时统计 InfLLMv2Attention 的分支走向 (只看 layer 0, 避免刷屏)
+_SPARSE_DEBUG = os.environ.get('SPARSE_DEBUG', '') == '1'
+_branch_counter = {'dense': 0, 'sparse': 0, 'max_kv_seq_len': 0}
 
 _CONFIG_FOR_DOC = 'MiniCPMConfig'
 
@@ -1163,6 +1168,18 @@ class MiniCPMInfLLMv2Attention(MiniCPMAttention):
             query_states = query_states.to(target_dtype)
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
+        if _SPARSE_DEBUG and self.layer_idx == 0:
+            # kv_seq_len = position_ids.max()+1, 打包时等于 batch 内最长文档的长度,
+            # 不是拼接总长 —— 想确认稀疏分支到底有没有被调用, 看这里
+            _branch_counter['sparse' if kv_seq_len >= self.dense_len else 'dense'] += 1
+            _branch_counter['max_kv_seq_len'] = max(_branch_counter['max_kv_seq_len'], kv_seq_len)
+            n = _branch_counter['dense'] + _branch_counter['sparse']
+            if n <= 5 or n % 50 == 0:
+                print(f'[sparse-debug] layer0 call#{n} q_len={q_len} kv_seq_len={kv_seq_len} '
+                      f'dense_len={self.dense_len} -> '
+                      f"{'SPARSE' if kv_seq_len >= self.dense_len else 'dense'}  "
+                      f"(累计 dense={_branch_counter['dense']} sparse={_branch_counter['sparse']} "
+                      f"max_kv={_branch_counter['max_kv_seq_len']})", flush=True)
         if kv_seq_len < self.dense_len:
             attn_output = self._flash_attention_forward_dense(
                 query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate,

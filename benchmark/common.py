@@ -27,6 +27,14 @@ def load_model(model_dir: Path, device: str, dtype: torch.dtype):
         dtype=dtype,
     ).to(device)
     model.eval()
+    # Fine-tuned checkpoints are saved with use_cache=False (gradient
+    # checkpointing turns it off during training and Trainer persists that into
+    # config.json). Left as-is, every generate() call recomputes the whole
+    # prefix at each step, which is orders of magnitude slower and would also
+    # make a before/after timing comparison meaningless.
+    model.config.use_cache = True
+    if getattr(model, "generation_config", None) is not None:
+        model.generation_config.use_cache = True
     return tokenizer, model
 
 
@@ -54,6 +62,18 @@ def generate_response(
     return tokenizer.decode(
         output_ids[0][inputs.shape[1] :], skip_special_tokens=True
     )
+
+
+def shard(rows, shard_index: int = 0, num_shards: int = 1):
+    """Strided slice of `rows` for one worker of a `num_shards`-way split.
+
+    Striding (rather than contiguous blocks) keeps each shard's mix of
+    easy/hard examples similar, so a partially finished run still gives a
+    representative accuracy.
+    """
+    if num_shards <= 1:
+        return rows
+    return rows[shard_index::num_shards]
 
 
 def read_jsonl(path: Path):
